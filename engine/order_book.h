@@ -7,6 +7,8 @@
 #include <map>
 #include <vector>
 
+namespace engine {
+
 class OrderBook {
 public:
     std::vector<Trade> add_limit_order(
@@ -25,3 +27,5 @@ private:
     AskBook asks_;
     SequenceNumber next_sequence_number_{1};
 };
+
+}  // namespace engine
