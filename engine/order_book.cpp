@@ -1,14 +1,25 @@
 #include "order_book.h"
 
+#include <algorithm>
+#include <stdexcept>
+
 namespace engine {
 
 std::vector<Trade> OrderBook::add_limit_order(
     OrderId order_id,
     Side side,
     Price price,
-    Quantity quantity) {
-    std::vector<Trade> trades;
-    Order incoming{
+    Quantity quantity
+) {
+    if (price <= 0) {
+        throw std::invalid_argument("price must be positive");
+    }
+
+    if (quantity == 0) {
+        throw std::invalid_argument("quantity must be positive");
+    }
+
+    Order incoming_order{
         .id = order_id,
         .side = side,
         .price = price,
@@ -16,81 +27,111 @@ std::vector<Trade> OrderBook::add_limit_order(
         .sequence_number = next_sequence_number_++
     };
 
+    std::vector<Trade> trades;
+
     if (side == Side::Buy) {
-        while (incoming.remaining_quantity > 0 && !asks_.empty()) {
-            auto best_ask = asks_.begin();
-            if (price < best_ask->first) {
-                break;
-            }
-
-            auto& resting = best_ask->second.front();
-            const Quantity traded_quantity =
-                incoming.remaining_quantity < resting.remaining_quantity
-                    ? incoming.remaining_quantity
-                    : resting.remaining_quantity;
-
-            trades.push_back(Trade{
-                .buy_order_id = incoming.id,
-                .sell_order_id = resting.id,
-                .price = resting.price,
-                .quantity = traded_quantity
-            });
-
-            incoming.remaining_quantity -= traded_quantity;
-            resting.remaining_quantity -= traded_quantity;
-
-            if (resting.remaining_quantity == 0) {
-                best_ask->second.pop_front();
-                if (best_ask->second.empty()) {
-                    asks_.erase(best_ask);
-                }
-            }
-        }
-
-        if (incoming.remaining_quantity > 0) {
-            bids_[incoming.price].push_back(incoming);
-        }
+        match_buy_order(incoming_order, trades);
     } else {
-        while (incoming.remaining_quantity > 0 && !bids_.empty()) {
-            auto best_bid = bids_.begin();
-            if (price > best_bid->first) {
-                break;
-            }
+        match_sell_order(incoming_order, trades);
+    }
 
-            auto& resting = best_bid->second.front();
-            const Quantity traded_quantity =
-                incoming.remaining_quantity < resting.remaining_quantity
-                    ? incoming.remaining_quantity
-                    : resting.remaining_quantity;
-
-            trades.push_back(Trade{
-                .buy_order_id = resting.id,
-                .sell_order_id = incoming.id,
-                .price = resting.price,
-                .quantity = traded_quantity
-            });
-
-            incoming.remaining_quantity -= traded_quantity;
-            resting.remaining_quantity -= traded_quantity;
-
-            if (resting.remaining_quantity == 0) {
-                best_bid->second.pop_front();
-                if (best_bid->second.empty()) {
-                    bids_.erase(best_bid);
-                }
-            }
-        }
-
-        if (incoming.remaining_quantity > 0) {
-            asks_[incoming.price].push_back(incoming);
-        }
+    if (incoming_order.remaining_quantity > 0) {
+        add_resting_order(incoming_order);
     }
 
     return trades;
+}
+
+void OrderBook::match_buy_order(Order& incoming_order, std::vector<Trade>& trades) {
+    while (incoming_order.remaining_quantity > 0 && !asks_.empty()) {
+        auto best_ask_it = asks_.begin();
+        Price best_ask_price = best_ask_it->first;
+
+        if (incoming_order.price < best_ask_price) {
+            break;
+        }
+
+        auto& resting_orders = best_ask_it->second;
+
+        while (incoming_order.remaining_quantity > 0 && !resting_orders.empty()) {
+            Order& resting_order = resting_orders.front();
+
+            Quantity trade_quantity = std::min(
+                incoming_order.remaining_quantity,
+                resting_order.remaining_quantity
+            );
+
+            trades.push_back(Trade{
+                .buy_order_id = incoming_order.id,
+                .sell_order_id = resting_order.id,
+                .price = resting_order.price,
+                .quantity = trade_quantity
+            });
+
+            incoming_order.remaining_quantity -= trade_quantity;
+            resting_order.remaining_quantity -= trade_quantity;
+
+            if (resting_order.remaining_quantity == 0) {
+                resting_orders.pop_front();
+            }
+        }
+
+        if (resting_orders.empty()) {
+            asks_.erase(best_ask_it);
+        }
+    }
+}
+
+void OrderBook::match_sell_order(Order& incoming_order, std::vector<Trade>& trades) {
+    while (incoming_order.remaining_quantity > 0 && !bids_.empty()) {
+        auto best_bid_it = bids_.begin();
+        Price best_bid_price = best_bid_it->first;
+
+        if (incoming_order.price > best_bid_price) {
+            break;
+        }
+
+        auto& resting_orders = best_bid_it->second;
+
+        while (incoming_order.remaining_quantity > 0 && !resting_orders.empty()) {
+            Order& resting_order = resting_orders.front();
+
+            Quantity trade_quantity = std::min(
+                incoming_order.remaining_quantity,
+                resting_order.remaining_quantity
+            );
+
+            trades.push_back(Trade{
+                .buy_order_id = resting_order.id,
+                .sell_order_id = incoming_order.id,
+                .price = resting_order.price,
+                .quantity = trade_quantity
+            });
+
+            incoming_order.remaining_quantity -= trade_quantity;
+            resting_order.remaining_quantity -= trade_quantity;
+
+            if (resting_order.remaining_quantity == 0) {
+                resting_orders.pop_front();
+            }
+        }
+
+        if (resting_orders.empty()) {
+            bids_.erase(best_bid_it);
+        }
+    }
+}
+
+void OrderBook::add_resting_order(const Order& order) {
+    if (order.side == Side::Buy) {
+        bids_[order.price].push_back(order);
+    } else {
+        asks_[order.price].push_back(order);
+    }
 }
 
 bool OrderBook::empty() const {
     return bids_.empty() && asks_.empty();
 }
 
-}  // namespace engine
+} // namespace engine

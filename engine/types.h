@@ -15,18 +15,18 @@ enum class Side : std::uint8_t {
 };
 
 struct Order {
-    OrderId id;
-    Side side;
-    Price price;
-    Quantity remaining_quantity;
-    SequenceNumber sequence_number;
+    OrderId id{};
+    Side side{};
+    Price price{};
+    Quantity remaining_quantity{};
+    SequenceNumber sequence_number{};
 };
 
 struct Trade {
-    OrderId buy_order_id;
-    OrderId sell_order_id;
-    Price price;
-    Quantity quantity;
+    OrderId buy_order_id{};
+    OrderId sell_order_id{};
+    Price price{};
+    Quantity quantity{};
 };
 
-}  // namespace engine
+} // namespace engine

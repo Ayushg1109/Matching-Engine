@@ -15,7 +15,8 @@ public:
         OrderId order_id,
         Side side,
         Price price,
-        Quantity quantity);
+        Quantity quantity
+    );
 
     bool empty() const;
 
@@ -25,7 +26,13 @@ private:
 
     BidBook bids_;
     AskBook asks_;
+
     SequenceNumber next_sequence_number_{1};
+
+private:
+    void match_buy_order(Order& incoming_order, std::vector<Trade>& trades);
+    void match_sell_order(Order& incoming_order, std::vector<Trade>& trades);
+    void add_resting_order(const Order& order);
 };
 
-}  // namespace engine
+} // namespace engine
