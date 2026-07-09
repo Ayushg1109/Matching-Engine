@@ -2,9 +2,10 @@
 
 #include "types.h"
 
-#include <deque>
 #include <functional>
+#include <list>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace engine {
@@ -19,13 +20,24 @@ public:
     );
 
     bool empty() const;
+    bool contains_order(OrderId order_id) const;
 
 private:
-    using BidBook = std::map<Price, std::deque<Order>, std::greater<Price>>;
-    using AskBook = std::map<Price, std::deque<Order>, std::less<Price>>;
+    using OrderQueue = std::list<Order>;
+
+    using BidBook = std::map<Price, OrderQueue, std::greater<Price>>;
+    using AskBook = std::map<Price, OrderQueue, std::less<Price>>;
+
+    struct OrderLocation {
+        Side side{};
+        Price price{};
+        OrderQueue::iterator iterator{};
+    };
 
     BidBook bids_;
     AskBook asks_;
+
+    std::unordered_map<OrderId, OrderLocation> order_lookup_;
 
     SequenceNumber next_sequence_number_{1};
 
