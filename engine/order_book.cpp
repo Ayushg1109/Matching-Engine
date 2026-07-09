@@ -1,6 +1,7 @@
 #include "order_book.h"
 
 #include <algorithm>
+#include <iterator>
 #include <stdexcept>
 
 namespace engine {
@@ -17,6 +18,10 @@ std::vector<Trade> OrderBook::add_limit_order(
 
     if (quantity == 0) {
         throw std::invalid_argument("quantity must be positive");
+    }
+
+    if (order_lookup_.contains(order_id)) {
+        throw std::invalid_argument("duplicate active order id");
     }
 
     Order incoming_order{
@@ -72,6 +77,7 @@ void OrderBook::match_buy_order(Order& incoming_order, std::vector<Trade>& trade
             resting_order.remaining_quantity -= trade_quantity;
 
             if (resting_order.remaining_quantity == 0) {
+                order_lookup_.erase(resting_order.id);
                 resting_orders.pop_front();
             }
         }
@@ -112,6 +118,7 @@ void OrderBook::match_sell_order(Order& incoming_order, std::vector<Trade>& trad
             resting_order.remaining_quantity -= trade_quantity;
 
             if (resting_order.remaining_quantity == 0) {
+                order_lookup_.erase(resting_order.id);
                 resting_orders.pop_front();
             }
         }
@@ -124,14 +131,36 @@ void OrderBook::match_sell_order(Order& incoming_order, std::vector<Trade>& trad
 
 void OrderBook::add_resting_order(const Order& order) {
     if (order.side == Side::Buy) {
-        bids_[order.price].push_back(order);
+        auto& level = bids_[order.price];
+        level.push_back(order);
+
+        auto order_it = std::prev(level.end());
+
+        order_lookup_[order.id] = OrderLocation{
+            .side = order.side,
+            .price = order.price,
+            .iterator = order_it
+        };
     } else {
-        asks_[order.price].push_back(order);
+        auto& level = asks_[order.price];
+        level.push_back(order);
+
+        auto order_it = std::prev(level.end());
+
+        order_lookup_[order.id] = OrderLocation{
+            .side = order.side,
+            .price = order.price,
+            .iterator = order_it
+        };
     }
 }
 
 bool OrderBook::empty() const {
     return bids_.empty() && asks_.empty();
+}
+
+bool OrderBook::contains_order(OrderId order_id) const {
+    return order_lookup_.contains(order_id);
 }
 
 } // namespace engine
